@@ -1,7 +1,5 @@
 package org.example.translate.impl;
 
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
@@ -13,7 +11,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,9 +22,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -44,6 +38,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.example.translate.biz.TranslatePdfBiz;
 import org.example.translate.commom.constant.CommonConstant;
 import org.example.translate.commom.util.GsonUtil;
+import org.example.translate.facade.request.UploadFileReqDto;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -66,24 +61,67 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
      * 执行
      */
     @Override
-    public void execute(String txtFilePath) {
-        Map<String,String> params = new HashMap<String,String>();
-       // String fileName = this.getClass().getClassLoader().getResource("\\pdf\\finish\\369.pdf.txt").getPath();
-       //  Path path = new WindowsPath();
+    public String execute(UploadFileReqDto uploadFileReqDto) {
+
+        String from = "en";
+        String to = "zh-CHS";
+
+        MultipartFile file = uploadFileReqDto.getFile();
+        if (file.isEmpty()) {
+            return "上传失败，请选择文件";
+        }
+
+        log.info(file.getOriginalFilename());
+        String sourceFileName = file.getOriginalFilename();
+        /** 判断文件格式是否正确 */
+        if (!sourceFileName.endsWith(".txt") && !sourceFileName.endsWith(".pdf")) {
+            log.error("输入文件格式错误！");
+            return null;
+        }
+
+        String txtFilePath = null;
+        /** 如果收到的文件是txt格式的则跳过pdf解析 */
+        if (sourceFileName.endsWith(".txt")) {
+            txtFilePath = getFile(file, "source\\target\\").toString();
+            return txtFilePath;
+        } else {
+            txtFilePath = pdfToTxt(file);
+        }
+
+        if (txtFilePath == null) {
+            return "解析失败，请重新选择文件";
+        }
+        /** 判断是否已说明来源语言，否则就使用默认值 */
+        if (uploadFileReqDto.getFrom()
+            .equals(from) || uploadFileReqDto.getFrom()
+            .equals(to)) {
+            from = uploadFileReqDto.getFrom();
+        }
+        /** 判断是否已说明结果语言，否则就使用默认值 */
+        if (uploadFileReqDto.getTo()
+            .equals(from) || uploadFileReqDto.getTo()
+            .equals(to)) {
+            to = uploadFileReqDto.getTo();
+        }
+
+        Map<String, String> params = new HashMap<String, String>();
+        // String fileName = this.getClass().getClassLoader().getResource("\\pdf\\finish\\369.pdf.txt").getPath();
+        //  Path path = new WindowsPath();
         //String fileUtl = this.getClass().getResource("\\pdf\\finish\\369.pdf.txt").getFile();
         File txt = new File(txtFilePath);
-        String resultFile = txt.getPath().replace(txt.getName(), "") + "result" + File.separator + "result_" + txt.getName();
+        String resultFile = txt.getPath()
+            .replace(txt.getName(), "") + "result" + File.separator + "result_" + txt.getName();
         log.info("翻译结果文件路径：{}", resultFile);
-        String compareFile = txt.getPath().replace(txt.getName(), "") + "compare" + File.separator + "compare_" + txt.getName();
+        String compareFile = txt.getPath()
+            .replace(txt.getName(), "") + "compare" + File.separator + "compare_" + txt.getName();
         log.info("中英文对比文件路径：{}", compareFile);
         txtFilePath = txt.getName();
         while (pointer > -1) {
-            String q1 = parseTxt(txt);
-            String q = q1.replace("-\n", "").replace("\n", " ");
+            String q = parseTxt(txt);
             String salt = String.valueOf(System.currentTimeMillis());
             /** 组装参数 */
-            params.put("from", "en");
-            params.put("to", "zh-CHS");
+            params.put("from", from);
+            params.put("to", to);
             params.put("signType", "v3");
             String curtime = String.valueOf(System.currentTimeMillis() / 1000);
             params.put("curtime", curtime);
@@ -98,10 +136,11 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                 requestForHttp(resultFile, compareFile, CommonConstant.YOUDAO_URL, params);
             } catch (IOException e) {
                 log.error("翻译失败," + e);
+                return CommonConstant.DOCUMENT_TRANSLATE_RESULT_FAILURE;
             }
         }
         log.info("文件翻译完毕");
-
+        return CommonConstant.DOCUMENT_TRANSLATE_RESULT_SUCCESS;
     }
 
     /** 将pdf文献解析成txt */
@@ -109,17 +148,6 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
     @Override
     public String pdfToTxt(MultipartFile sourceFile) {
         try {
-            String sourceFileName = sourceFile.getOriginalFilename();
-            if (!sourceFileName.endsWith(".txt") && !sourceFileName.endsWith(".pdf")) {
-                log.error("输入文件格式错误！");
-                return null;
-            }
-            String target = null;
-            if (sourceFileName.endsWith(".txt")) {
-                target = getFile(sourceFile, "source\\target\\").toString();
-                return target;
-            }
-
             File pdf = new File(getFile(sourceFile, "source\\").toString());
             if (!pdf.isFile()) {
                 log.error("路径%s文件为空！" + pdf);
@@ -137,7 +165,8 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             //输出txt文本路径
             // File pdf = new File(fileName);
            //File pdf = Objects.requireNonNull(file.listFiles())[0];
-            target = pdf.getPath().replace(pdf.getName(), "") + "target" + File.separator + pdf.getName() + ".txt";
+            String target = pdf.getPath()
+                .replace(pdf.getName(), "") + "target" + File.separator + pdf.getName() + ".txt";
             log.info("解析pdf生成的txt文件路径：{}", target);
             PDDocument document = PDDocument.load(pdf);
             PDFTextStripper pts = new PDFTextStripper();
@@ -225,7 +254,9 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             log.error("开始解析txt失败" + e);
         }
 
-        return content.toString();
+        return content.toString()
+            .replace("-\n", "")
+            .replace("\n", " ");
     }
 
     public void requestForHttp(String result, String compare, String url,Map<String,String> params) throws IOException {

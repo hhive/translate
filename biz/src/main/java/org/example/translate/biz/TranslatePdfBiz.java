@@ -1,7 +1,6 @@
 package org.example.translate.biz;
 
-import java.io.File;
-
+import org.example.translate.facade.request.UploadFileReqDto;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -14,9 +13,9 @@ public interface TranslatePdfBiz {
     /**
      * 翻译文档
      *
-     * @param fileName
+     * @param uploadFileReqDto
      */
-    void execute(String fileName);
+    String execute(UploadFileReqDto uploadFileReqDto);
 
     /**
      * 将pdf文献解析成txt

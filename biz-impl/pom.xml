@@ -41,6 +41,11 @@
             <artifactId>httpclient</artifactId>
             <version>4.5.10</version>
         </dependency>
+        <dependency>
+            <groupId>org.example</groupId>
+            <artifactId>facade</artifactId>
+            <version>${revision}</version>
+        </dependency>
     </dependencies>
 
 
