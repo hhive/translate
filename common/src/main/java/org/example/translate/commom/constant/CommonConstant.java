@@ -20,5 +20,15 @@ public class CommonConstant {
     /**
      * 有道翻译接口密匙
      */
-    public static final String APP_SECRET = "hxfjp9expBcaML8QNj65bLmgMjFd70O1";
+    public static final String APP_SECRET = "TBVBEMynZVmDfgTQOyAaYFip9YVrMiBd";
+
+    /**
+     * 文档翻译结果 成功
+     */
+    public static final String DOCUMENT_TRANSLATE_RESULT_SUCCESS = "SUCCESS";
+
+    /**
+     * 文档翻译结果 失败
+     */
+    public static final String DOCUMENT_TRANSLATE_RESULT_FAILURE = "FAILURE";
 }

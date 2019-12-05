@@ -104,7 +104,6 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             to = uploadFileReqDto.getTo();
         }
 
-        Map<String, String> params = new HashMap<String, String>();
         // String fileName = this.getClass().getClassLoader().getResource("\\pdf\\finish\\369.pdf.txt").getPath();
         //  Path path = new WindowsPath();
         //String fileUtl = this.getClass().getResource("\\pdf\\finish\\369.pdf.txt").getFile();
@@ -117,20 +116,7 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         log.info("中英文对比文件路径：{}", compareFile);
         txtFilePath = txt.getName();
         while (pointer > -1) {
-            String q = parseTxt(txt);
-            String salt = String.valueOf(System.currentTimeMillis());
-            /** 组装参数 */
-            params.put("from", from);
-            params.put("to", to);
-            params.put("signType", "v3");
-            String curtime = String.valueOf(System.currentTimeMillis() / 1000);
-            params.put("curtime", curtime);
-            String signStr = CommonConstant.APP_KEY + truncate(q) + salt + curtime + CommonConstant.APP_SECRET;
-            String sign = getDigest(signStr);
-            params.put("appKey", CommonConstant.APP_KEY);
-            params.put("q", q);
-            params.put("salt", salt);
-            params.put("sign", sign);
+            Map<String, String> params = convertParam(txt, from, to);
             /** 处理结果 */
             try {
                 requestForHttp(resultFile, compareFile, CommonConstant.YOUDAO_URL, params);
@@ -141,6 +127,25 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         }
         log.info("文件翻译完毕");
         return CommonConstant.DOCUMENT_TRANSLATE_RESULT_SUCCESS;
+    }
+
+    private Map<String, String> convertParam(File txt, String from, String to) {
+        Map<String, String> params = new HashMap<String, String>();
+        String q = parseTxt(txt);
+        String salt = String.valueOf(System.currentTimeMillis());
+        /** 组装参数 */
+        params.put("from", from);
+        params.put("to", to);
+        params.put("signType", "v3");
+        String curtime = String.valueOf(System.currentTimeMillis() / 1000);
+        params.put("curtime", curtime);
+        String signStr = CommonConstant.APP_KEY + truncate(q) + salt + curtime + CommonConstant.APP_SECRET;
+        String sign = getDigest(signStr);
+        params.put("appKey", CommonConstant.APP_KEY);
+        params.put("q", q);
+        params.put("salt", salt);
+        params.put("sign", sign);
+        return params;
     }
 
     /** 将pdf文献解析成txt */
