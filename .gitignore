@@ -1,0 +1,9 @@
+# Project exclude paths
+/biz/target/
+/biz-impl/target/
+/common/target/
+/controller/target/
+/dal/target/
+/dal-impl/target/
+/facade/target/
+/web/target/
