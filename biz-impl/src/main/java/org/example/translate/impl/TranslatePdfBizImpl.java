@@ -115,8 +115,9 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             .replace(txt.getName(), "") + "compare" + File.separator + "compare_" + txt.getName();
         log.info("中英文对比文件路径：{}", compareFile);
         txtFilePath = txt.getName();
+        Map<String, String> params = new HashMap<String, String>();
         while (pointer > -1) {
-            Map<String, String> params = convertParam(txt, from, to);
+            params = convertParam(params, txt, from, to);
             /** 处理结果 */
             try {
                 requestForHttp(resultFile, compareFile, CommonConstant.YOUDAO_URL, params);
@@ -129,22 +130,25 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         return CommonConstant.DOCUMENT_TRANSLATE_RESULT_SUCCESS;
     }
 
-    private Map<String, String> convertParam(File txt, String from, String to) {
-        Map<String, String> params = new HashMap<String, String>();
+    private Map<String, String> convertParam(Map<String, String> params, File txt, String from, String to) {
+        /** 组装参数 */
+        if (params == null || params.size() == 0) {
+            params.put("from", from);
+            params.put("to", to);
+            params.put("signType", "v3");
+            params.put("appKey", CommonConstant.APP_KEY);
+
+        }
         String q = parseTxt(txt);
         String salt = String.valueOf(System.currentTimeMillis());
-        /** 组装参数 */
-        params.put("from", from);
-        params.put("to", to);
-        params.put("signType", "v3");
         String curtime = String.valueOf(System.currentTimeMillis() / 1000);
         params.put("curtime", curtime);
         String signStr = CommonConstant.APP_KEY + truncate(q) + salt + curtime + CommonConstant.APP_SECRET;
         String sign = getDigest(signStr);
-        params.put("appKey", CommonConstant.APP_KEY);
         params.put("q", q);
         params.put("salt", salt);
         params.put("sign", sign);
+
         return params;
     }
 
@@ -169,14 +173,14 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             PrintWriter writer = null;
             //输出txt文本路径
             // File pdf = new File(fileName);
-           //File pdf = Objects.requireNonNull(file.listFiles())[0];
+            //File pdf = Objects.requireNonNull(file.listFiles())[0];
             String target = pdf.getPath()
                 .replace(pdf.getName(), "") + "target" + File.separator + pdf.getName() + ".txt";
             log.info("解析pdf生成的txt文件路径：{}", target);
             PDDocument document = PDDocument.load(pdf);
             PDFTextStripper pts = new PDFTextStripper();
             endPage = document.getNumberOfPages();
-            log.info("Total Page: " +  endPage);
+            log.info("Total Page: " + endPage);
             pts.setStartPage(startPage);
             pts.setEndPage(endPage);
             try {
@@ -189,7 +193,7 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                 writer.close();
             } catch (Exception e) {
                 throw e;
-            }finally {
+            } finally {
                 document.close();
             }
             return target;
@@ -205,7 +209,7 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             File empty = new File("");
             String courseFile = empty.getCanonicalPath();//标准的路径 ;
             // String author = empty.getAbsolutePath();//绝对路径;
-            String middlePath = ("\\biz-impl\\src\\main\\resources\\" + targetDir).replace("\\", File.separator) ;
+            String middlePath = ("\\biz-impl\\src\\main\\resources\\" + targetDir).replace("\\", File.separator);
             pdfPath = Paths.get(courseFile, middlePath, sourceFile.getOriginalFilename());
             try (OutputStream os = Files.newOutputStream(pdfPath)) {
                 os.write(sourceFile.getBytes());
@@ -229,12 +233,14 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         try {
             boolean flag = false;
             if (bufferedReader == null) {
-                 bufferedReader = new BufferedReader(new InputStreamReader(new FileInputStream(file),StandardCharsets.UTF_8));
+                bufferedReader = new BufferedReader(
+                    new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
             }
             // RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
             while ((line = bufferedReader.readLine()) != null) {
 
-                if (line.trim().endsWith("-")) {
+                if (line.trim()
+                    .endsWith("-")) {
                     line = line.replace("-", "");
                     content.append(" ")
                         .append(line);
@@ -248,7 +254,8 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                             .append(line);
                     }
                 }
-                if (line.isEmpty() || line.trim().endsWith(".")){
+                if (line.isEmpty() || line.trim()
+                    .endsWith(".")) {
                     break;
                 }
             }
@@ -264,7 +271,8 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             .replace("\n", " ");
     }
 
-    public void requestForHttp(String result, String compare, String url,Map<String,String> params) throws IOException {
+    public void requestForHttp(String result, String compare, String url, Map<String, String> params)
+    throws IOException {
 
         /** 创建HttpClient */
         CloseableHttpClient httpClient = HttpClients.createDefault();
@@ -272,30 +280,32 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         /** httpPost */
         HttpPost httpPost = new HttpPost(url);
         List<NameValuePair> paramsList = new ArrayList<NameValuePair>();
-        Iterator<Map.Entry<String,String>> it = params.entrySet().iterator();
-        while(it.hasNext()){
-            Map.Entry<String,String> en = it.next();
+        Iterator<Map.Entry<String, String>> it = params.entrySet()
+            .iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, String> en = it.next();
             String key = en.getKey();
             String value = en.getValue();
-            paramsList.add(new BasicNameValuePair(key,value));
+            paramsList.add(new BasicNameValuePair(key, value));
         }
-        httpPost.setEntity(new UrlEncodedFormEntity(paramsList,"UTF-8"));
+        httpPost.setEntity(new UrlEncodedFormEntity(paramsList, "UTF-8"));
         CloseableHttpResponse httpResponse = httpClient.execute(httpPost);
-        try{
+        try {
             Header[] contentType = httpResponse.getHeaders("Content-Type");
             log.info("Content-Type:" + contentType[0].getValue());
-            if("audio/mp3".equals(contentType[0].getValue())){
+            if ("audio/mp3".equals(contentType[0].getValue())) {
                 //如果响应是wav
                 HttpEntity httpEntity = httpResponse.getEntity();
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                httpResponse.getEntity().writeTo(baos);
+                httpResponse.getEntity()
+                    .writeTo(baos);
                 byte[] resultByte = baos.toByteArray();
                 EntityUtils.consume(httpEntity);
-                if(resultByte != null){//合成成功
-                    String file = "合成的音频存储路径"+System.currentTimeMillis() + ".mp3";
+                if (resultByte != null) {//合成成功
+                    String file = "合成的音频存储路径" + System.currentTimeMillis() + ".mp3";
                     byte2File(resultByte, file);
                 }
-            }else{
+            } else {
                 /** 响应不是音频流，直接显示结果 */
                 HttpEntity httpEntity = httpResponse.getEntity();
                 String json = EntityUtils.toString(httpEntity, StandardCharsets.UTF_8);
@@ -313,15 +323,15 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                 BufferedWriter out1 = null;
                 try {
                     /** 追加生成结果文件 */
-                    out = new BufferedWriter(new OutputStreamWriter(
-                        new FileOutputStream(new File(result), true), StandardCharsets.UTF_8));
+                    out = new BufferedWriter(
+                        new OutputStreamWriter(new FileOutputStream(new File(result), true), StandardCharsets.UTF_8));
                     out.write("\n");
                     out.write("    ");
                     out.write(content);
 
                     /** 追加生成对比文件*/
-                    out1 = new BufferedWriter(new OutputStreamWriter(
-                        new FileOutputStream(new File(compare), true), StandardCharsets.UTF_8));
+                    out1 = new BufferedWriter(
+                        new OutputStreamWriter(new FileOutputStream(new File(compare), true), StandardCharsets.UTF_8));
                     out1.write("\n");
                     out1.write("    ");
                     out1.write(source);
@@ -339,12 +349,12 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                     }
                 }
             }
-        }finally {
-            try{
-                if(httpResponse!=null){
+        } finally {
+            try {
+                if (httpResponse != null) {
                     httpResponse.close();
                 }
-            }catch(IOException e){
+            } catch (IOException e) {
                 log.error("## release resouce error ##" + e);
             }
         }
@@ -377,21 +387,20 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
     }
 
     /**
-     *
      * @param result 音频字节流
      * @param file 存储路径
      */
     private static void byte2File(byte[] result, String file) {
         File audioFile = new File(file);
         FileOutputStream fos = null;
-        try{
+        try {
             fos = new FileOutputStream(audioFile);
             fos.write(result);
 
-        }catch (Exception e){
+        } catch (Exception e) {
             log.info(e.toString());
-        }finally {
-            if(fos != null){
+        } finally {
+            if (fos != null) {
                 try {
                     fos.close();
                 } catch (IOException e) {
