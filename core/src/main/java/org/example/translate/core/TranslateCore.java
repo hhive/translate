@@ -1,4 +1,4 @@
-package org.example.translate.impl;
+package org.example.translate.core;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -35,7 +35,6 @@ import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.example.translate.biz.TranslatePdfBiz;
 import org.example.translate.commom.constant.CommonConstant;
 import org.example.translate.commom.util.GsonUtil;
 import org.example.translate.facade.request.UploadFileReqDto;
@@ -47,11 +46,11 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * @author lih@yunrong.cn
  * @version V2.1
- * @since 2.1.0 2019/10/30 12:05
+ * @since 2.1.0 2019/12/6 20:01
  */
 @Slf4j
 @Service
-public class TranslatePdfBizImpl implements TranslatePdfBiz {
+public class TranslateCore {
 
     private Long pointer = 0L;
 
@@ -60,7 +59,6 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
     /**
      * 执行
      */
-    @Override
     public String execute(UploadFileReqDto uploadFileReqDto) {
 
         /** 只支持英中互译 */
@@ -104,6 +102,9 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             to = uploadFileReqDto.getTo();
         }
 
+        // String fileName = this.getClass().getClassLoader().getResource("\\pdf\\finish\\369.pdf.txt").getPath();
+        //  Path path = new WindowsPath();
+        //String fileUtl = this.getClass().getResource("\\pdf\\finish\\369.pdf.txt").getFile();
         File txt = new File(txtFilePath);
         String resultFile = txt.getPath()
             .replace(txt.getName(), "") + "result" + File.separator + "result_" + txt.getName();
@@ -113,7 +114,7 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         log.info("中英文对比文件路径：{}", compareFile);
         txtFilePath = txt.getName();
         Map<String, String> params = new HashMap<String, String>();
-        while (pointer > -1) {
+        while (this.pointer > -1) {
             params = convertParam(params, txt, from, to);
             /** 处理结果 */
             try {
@@ -152,7 +153,6 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
 
     /** 将pdf文献解析成txt */
     //怎么抛出错误给前台，考虑用aop
-    @Override
     public String pdfToTxt(MultipartFile sourceFile) {
         try {
             File pdf = new File(getFile(sourceFile, "source\\").toString());
@@ -264,7 +264,7 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                 }
             }
             if (line == null) {
-                pointer = -1L;
+                this.pointer = -1L;
             }
         } catch (IOException e) {
             log.error("开始解析txt失败" + e);
@@ -334,27 +334,27 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                             StandardCharsets.UTF_8));
                         out.write("\n");
                         out.write("    ");
-                    out.write(content);
+                        out.write(content);
 
-                    /** 追加生成对比文件*/
-                    out1 = new BufferedWriter(
-                        new OutputStreamWriter(new FileOutputStream(new File(compare), true), StandardCharsets.UTF_8));
-                    out1.write("\n");
-                    out1.write("    ");
-                    out1.write(source);
-                    out1.write("\n");
-                    out1.write("    " + "翻译：");
-                    out1.write(content);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                } finally {
-                    try {
-                        out.close();
-                        out1.close();
-                    } catch (IOException e) {
+                        /** 追加生成对比文件*/
+                        out1 = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(new File(compare), true),
+                            StandardCharsets.UTF_8));
+                        out1.write("\n");
+                        out1.write("    ");
+                        out1.write(source);
+                        out1.write("\n");
+                        out1.write("    " + "翻译：");
+                        out1.write(content);
+                    } catch (Exception e) {
                         e.printStackTrace();
+                    } finally {
+                        try {
+                            out.close();
+                            out1.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
                     }
-                }
                 }
             }
         } finally {

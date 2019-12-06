@@ -2,7 +2,6 @@ package org.example.translate.impl;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -19,11 +18,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -37,8 +34,15 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.example.translate.biz.TranslatePdfBiz;
 import org.example.translate.commom.constant.CommonConstant;
+import org.example.translate.commom.util.CollectionUtil;
 import org.example.translate.commom.util.GsonUtil;
+import org.example.translate.commom.util.MD5Util;
+import org.example.translate.commom.util.StringUtil;
+import org.example.translate.core.TranslateCore;
 import org.example.translate.facade.request.UploadFileReqDto;
+import org.example.translate.facade.response.BaiDuTranslateRespDto;
+import org.example.translate.facade.response.TranslateResult;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -47,11 +51,14 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * @author lih@yunrong.cn
  * @version V2.1
- * @since 2.1.0 2019/10/30 12:05
+ * @since 2.1.0 2019/12/6 19:45
  */
 @Slf4j
 @Service
-public class TranslatePdfBizImpl implements TranslatePdfBiz {
+public class BaiDuTranslateBizImpl implements TranslatePdfBiz {
+
+    @Autowired
+    private TranslateCore translateCore;
 
     private Long pointer = 0L;
 
@@ -64,8 +71,8 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
     public String execute(UploadFileReqDto uploadFileReqDto) {
 
         /** 只支持英中互译 */
-        String from = "en";
-        String to = "zh-CHS";
+        String from = CommonConstant.LANGUAGE_EN;
+        String to = CommonConstant.LANGUAGE_ZH;
 
         MultipartFile file = uploadFileReqDto.getFile();
         if (file.isEmpty()) {
@@ -93,14 +100,14 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         }
         /** 判断是否已说明来源语言，否则就使用默认值 */
         if (uploadFileReqDto.getFrom()
-            .equals(from) || uploadFileReqDto.getFrom()
-            .equals(to)) {
+            .equals(CommonConstant.LANGUAGE_EN) || uploadFileReqDto.getFrom()
+            .equals(CommonConstant.LANGUAGE_ZH)) {
             from = uploadFileReqDto.getFrom();
         }
         /** 判断是否已说明结果语言，否则就使用默认值 */
-        if (uploadFileReqDto.getTo()
-            .equals(from) || uploadFileReqDto.getTo()
-            .equals(to)) {
+        if (uploadFileReqDto.getFrom()
+            .equals(CommonConstant.LANGUAGE_EN) || uploadFileReqDto.getFrom()
+            .equals(CommonConstant.LANGUAGE_ZH)) {
             to = uploadFileReqDto.getTo();
         }
 
@@ -117,13 +124,14 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             params = convertParam(params, txt, from, to);
             /** 处理结果 */
             try {
-                requestForHttp(resultFile, compareFile, CommonConstant.YOU_DAO_URL, params);
+                requestForHttp(resultFile, compareFile, params);
             } catch (IOException e) {
                 log.error("翻译失败," + e);
                 return CommonConstant.DOCUMENT_TRANSLATE_RESULT_FAILURE;
             }
         }
         log.info("文件翻译完毕");
+        pointer = 0L;
         return CommonConstant.DOCUMENT_TRANSLATE_RESULT_SUCCESS;
     }
 
@@ -132,21 +140,17 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         if (params == null || params.size() == 0) {
             params.put("from", from);
             params.put("to", to);
-            params.put("signType", "v3");
-            params.put("appKey", CommonConstant.YOU_DAO_APP_KEY);
+            params.put("appid", CommonConstant.BAI_DU_APP_KEY);
 
         }
-        String q = parseTxt(txt);
+        String query = parseTxt(txt);
+        params.put("q", query);
+        // 随机数
         String salt = String.valueOf(System.currentTimeMillis());
-        String curtime = String.valueOf(System.currentTimeMillis() / 1000);
-        params.put("curtime", curtime);
-        String signStr = CommonConstant.YOU_DAO_APP_KEY + truncate(q) + salt + curtime
-            + CommonConstant.YOU_DAO_APP_SECRET;
-        String sign = getDigest(signStr);
-        params.put("q", q);
         params.put("salt", salt);
-        params.put("sign", sign);
-
+        // 签名 加密前的原文
+        String src = CommonConstant.BAI_DU_APP_KEY + query + salt + CommonConstant.BAI_DU_APP_SECRET;
+        params.put("sign", MD5Util.md5(src));
         return params;
     }
 
@@ -222,7 +226,7 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
     }
 
     /**
-     * 读取解析好的txt 有道翻译接口限制一次传送的字符数量，
+     * 读取解析好的txt 百度翻译接口限制一次传送的字符数量，
      * 因此需要把文档分成一段段进行翻译，同时这样操作也有利于构建对比结果文档
      */
     private String parseTxt(File file) {
@@ -275,19 +279,15 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
             .replace("\n", " ");
     }
 
-    public void requestForHttp(String result, String compare, String url, Map<String, String> params)
-    throws IOException {
+    public void requestForHttp(String result, String compare, Map<String, String> params) throws IOException {
 
         /** 创建HttpClient */
         CloseableHttpClient httpClient = HttpClients.createDefault();
 
         /** httpPost */
-        HttpPost httpPost = new HttpPost(url);
+        HttpPost httpPost = new HttpPost(CommonConstant.BAI_DU_URL);
         List<NameValuePair> paramsList = new ArrayList<NameValuePair>();
-        Iterator<Map.Entry<String, String>> it = params.entrySet()
-            .iterator();
-        while (it.hasNext()) {
-            Map.Entry<String, String> en = it.next();
+        for (Map.Entry<String, String> en : params.entrySet()) {
             String key = en.getKey();
             String value = en.getValue();
             paramsList.add(new BasicNameValuePair(key, value));
@@ -295,50 +295,40 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
         httpPost.setEntity(new UrlEncodedFormEntity(paramsList, "UTF-8"));
         CloseableHttpResponse httpResponse = httpClient.execute(httpPost);
         try {
-            Header[] contentType = httpResponse.getHeaders("Content-Type");
-            log.info("Content-Type:" + contentType[0].getValue());
-            if ("audio/mp3".equals(contentType[0].getValue())) {
-                //如果响应是wav
-                HttpEntity httpEntity = httpResponse.getEntity();
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                httpResponse.getEntity()
-                    .writeTo(baos);
-                byte[] resultByte = baos.toByteArray();
-                EntityUtils.consume(httpEntity);
-                if (resultByte != null) {//合成成功
-                    String file = "合成的音频存储路径" + System.currentTimeMillis() + ".mp3";
-                    byte2File(resultByte, file);
+            /** 显示结果 */
+            HttpEntity httpEntity = httpResponse.getEntity();
+            String json = EntityUtils.toString(httpEntity, StandardCharsets.UTF_8);
+            EntityUtils.consume(httpEntity);
+            BaiDuTranslateRespDto baiDuTranslateRespDto = GsonUtil.json2Obj(json, BaiDuTranslateRespDto.class);
+            log.info("百度翻译返回结果：{}", baiDuTranslateRespDto);
+            String source = null;
+            String content = null;
+            if (baiDuTranslateRespDto != null) {
+                List<TranslateResult> translateResultList = baiDuTranslateRespDto.getTrans_result();
+                if (CollectionUtil.isNotEmpty(translateResultList)) {
+                    TranslateResult translateResult = translateResultList.get(0);
+                    source = translateResult.getSrc();
+                    content = translateResult.getDst();
                 }
-            } else {
-                /** 响应不是音频流，直接显示结果 */
-                HttpEntity httpEntity = httpResponse.getEntity();
-                String json = EntityUtils.toString(httpEntity, StandardCharsets.UTF_8);
-                EntityUtils.consume(httpEntity);
-                HashMap hashMap = GsonUtil.json2Obj(json, HashMap.class);
-                //log.info("hashMap is " + hashMap);
-                String source = "原文：" + hashMap.get("query");
-                log.info(source);
-                String content = null;
-                if (hashMap.get("translation") != null) {
-                    content = hashMap.get("translation")
-                        .toString()
-                        .replace("[", "")
-                        .replace("]", "");
+            }
+            if (StringUtil.isNotBlank(source) && StringUtil.isNotBlank(content)) {
 
-                    log.info(content);
-                    BufferedWriter out = null;
-                    BufferedWriter out1 = null;
-                    try {
-                        /** 追加生成结果文件 */
-                        out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(new File(result), true),
-                            StandardCharsets.UTF_8));
-                        out.write("\n");
-                        out.write("    ");
+                log.info(content);
+                BufferedWriter out = new BufferedWriter(
+                    new OutputStreamWriter(new FileOutputStream(new File(result), true), StandardCharsets.UTF_8));
+                ;
+                BufferedWriter out1 = new BufferedWriter(
+                    new OutputStreamWriter(new FileOutputStream(new File(compare), true), StandardCharsets.UTF_8));
+                ;
+                try {
+                    /** 追加生成结果文件 */
+
+                    out.write("\n");
+                    out.write("    ");
                     out.write(content);
 
                     /** 追加生成对比文件*/
-                    out1 = new BufferedWriter(
-                        new OutputStreamWriter(new FileOutputStream(new File(compare), true), StandardCharsets.UTF_8));
+
                     out1.write("\n");
                     out1.write("    ");
                     out1.write(source);
@@ -354,7 +344,6 @@ public class TranslatePdfBizImpl implements TranslatePdfBiz {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-                }
                 }
             }
         } finally {

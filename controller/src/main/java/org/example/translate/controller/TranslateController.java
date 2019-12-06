@@ -3,6 +3,7 @@ package org.example.translate.controller;
 import org.example.translate.biz.TranslatePdfBiz;
 import org.example.translate.facade.request.UploadFileReqDto;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,11 +21,12 @@ import lombok.extern.slf4j.Slf4j;
 public class TranslateController {
 
     @Autowired
-    private TranslatePdfBiz translatePdfBiz;
+    @Qualifier("baiDuTranslateBizImpl")
+    private TranslatePdfBiz baiDuTranslateBizImpl;
 
     @PostMapping("/uploadFile")
     public String upload(UploadFileReqDto uploadFileReqDto) {
         log.info("TranslateController.upload入参：{}", uploadFileReqDto);
-        return translatePdfBiz.execute(uploadFileReqDto);
+        return baiDuTranslateBizImpl.execute(uploadFileReqDto);
     }
 }
